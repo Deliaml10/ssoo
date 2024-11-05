@@ -20,26 +20,44 @@ int tail(int entrada){
 	char **memoria = malloc(entrada * sizeof(char *));
 
 	while(fgets(line, sizeof(line), stdin) != NULL){
-		if(memoria[count %(-1 * entrada)] == NULL){
-
+		if(memoria == NULL){
+			perror("Error al reservar memoria");
+			return -1;
+		}
 
 //Hay que copiar la linea en el puntero memoria con strcopy
-			for(int i = 0; i < entrada; i++){
-				free(memoria[i]);
-			}
-			free(memoria);
-		return -1;
+		for(int i = 0; i < entrada; i++){
+			memoria[i] = NULL;
 		}
-	count++;
-	}
+		while (fgets(line, sizeof(line), stdin) != NULL) {
+     			if (memoria[count % entrada] != NULL) {
+            			free(memoria[count % entrada]);
+        		}
+        // Reserva memoria para la nueva línea y copia su contenido
+        memoria[count % entrada] = strdup(line);
+        if (memoria[count % entrada] == NULL) {
+            perror("Error al copiar la línea");
+            for (int i = 0; i < entrada; i++) {
+                free(memoria[i]);
+            }
+            free(memoria);
+            return -1;
+        }
+        count++;
+    }
 
-	for(int i = 0; i < entrada; i++){
-		printf("%s", memoria[i]);
-	}
+    int start = count > entrada ? count % entrada : 0;
+    int numlineas = count < entrada ? count : entrada;
 
-	for(int i = 0; i < entrada; i++){
-		free(memoria[i]);
-	}
-	free(memoria);
-	return 0;
+    for (int i = 0; i < numlineas; i++) {
+        printf("%s", memoria[(start + i) % entrada]);
+    }
+
+    // Libera la memoria reservada
+    for (int i = 0; i < entrada; i++) {
+        free(memoria[i]);
+    }
+    free(memoria);
+
+    return 0;
 }
