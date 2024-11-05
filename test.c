@@ -4,37 +4,35 @@
 #include <stdlib.h>
 
 int main(int argc, char *argv[]){
-	int entrada = -10;
+        int entrada = -10;
 
 //control de argumentos
-	if (argc == 2){
-		char *end;
-		long valor = strtol(argv[2], &end, 10);
+        if (argc >= 2){
+                char *end;
+                long valor = strtol(argv[2], &end, 10);
 
-		if(*end != '\0' || valor > 0) {
-			printf("El numero introducido tiene que ser un entero positivo\n");
-			return -1;
-		}else{
-			 entrada = (int)valor;
-		}
-	}else if(argc < 2){
-		entrada = -10;
-	}else if(argc > 2) {
-		fprintf(stderr, "Demasiados parametros\n");
-		return -1;
-	}
+                if(*end != '\0' || valor > 0) {
+                        printf("El numero introducido tiene que ser un entero positivo\n");
+                        return -1;
+                }else{
+                         entrada = (int)valor;
+                }
+        }else if(argc < 2){
+                entrada = -10;
+        }
 
 
-	if(strcmp(argv[1], "-head") == 0){
-		head(entrada);
-	}else if(strcmp(argv[1], "-tail") == 0){
-		tail(entrada);
-	}else if(strcmp(argv[1], "-longlines") == 0){
-		longlines(entrada);
-	}else{
-		printf("Error en los argumentos");
-		return -1;
-	}
+        if(strcmp(argv[1], "-head") == 0){
+                head(entrada);
+        }else if(strcmp(argv[1], "-tail") == 0){
+                tail(entrada);
+        }else if(strcmp(argv[1], "-longlines") == 0){
+                longlines(entrada);
+        }else{
+                printf("Error en los argumentos");
+                return -1;
+        }
 
 return 0;
 }
+
