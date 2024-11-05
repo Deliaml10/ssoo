@@ -1,4 +1,3 @@
-  GNU nano 7.2                                                                                                                                                                                       libreria.c *                                                                                                                                                                                               
 #include "libreria.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,6 +5,8 @@
 
 int head(int entrada2) {
         int entrada = 0;
+        char line[1024];
+        int count = 0;
         if(entrada2 == '\0'){
                 entrada = -10;
         }
@@ -18,8 +19,7 @@ int head(int entrada2) {
         entrada = entrada2 * -1;
 
 
-    char line[1024];
-    int count = 0;
+ 
 
     while (count <= entrada-1 && fgets(line, sizeof(line), stdin) != NULL) {
         printf("%s", line);
