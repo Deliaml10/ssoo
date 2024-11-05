@@ -1,20 +1,21 @@
+  GNU nano 7.2                                                                                                                                                                                       libreria.c *                                                                                                                                                                                               
 #include "libreria.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 int head(int entrada2) {
-	int entrada = 0;
-	if(entrada2 == '\0'){
-		entrada = -10;
-	}
+        int entrada = 0;
+        if(entrada2 == '\0'){
+                entrada = -10;
+        }
 
-	if(entrada2 > 0) {
-		fprintf(stderr, "El numero introducido tiene que ser positivo\n");
-	}else{
-		entrada = entrada2;
-	}
-	entrada = entrada2 * -1;
+        if(entrada2 > 0) {
+                fprintf(stderr, "El numero introducido tiene que ser positivo\n");
+        }else{
+                entrada = entrada2;
+        }
+        entrada = entrada2 * -1;
 
 
     char line[1024];
@@ -28,7 +29,13 @@ int head(int entrada2) {
 }
 
 int tail(int entrada2) {
-
+int i = 0;
+int j = 0;
+int inicio = 0;
+int numlineas = 0;
+char line[1024];
+char **memoria;
+int cont = 0;
 int entrada = 0;
         if(entrada2 == '\0'){
                 entrada = -10;
@@ -46,21 +53,18 @@ int entrada = 0;
         return -1;
     }
 
-    char line[1024];
-    int count = 0;
-
-    char **memoria = malloc(entrada * sizeof(char *));
+    memoria = malloc(entrada * sizeof(char *));
     if (memoria == NULL) {
         fprintf(stderr, "Error al reservar memoria para punteros\n");
         return -1;
     }
 
-    for (int i = 0; i < entrada; i++) {
+    for (i = 0; i < entrada; i++) {
         memoria[i] = malloc(1024 * sizeof(char));
         if (memoria[i] == NULL) {
             fprintf(stderr, "Error al reservar memoria para línea\n");
 
-            for (int j = 0; j < i; j++) {
+            for (j = 0; j < i; j++) {
                 free(memoria[j]);
             }
             free(memoria);
@@ -69,29 +73,35 @@ int entrada = 0;
     }
 
     while (fgets(line, sizeof(line), stdin) != NULL) {
-        strcpy(memoria[count % entrada], line);
-        count++;
+        strcpy(memoria[cont % entrada], line);
+        cont++;
     }
 
-    int start = count > entrada ? count % entrada : 0;
-    int numlineas = count < entrada ? count : entrada;
+    inicio = cont > entrada ? cont % entrada : 0;
+    numlineas = cont < entrada ? cont : entrada;
 
-    for (int i = 0; i < numlineas; i++) {
-        printf("%s", memoria[(start + i) % entrada]);
+    for (i = 0; i < numlineas; i++) {
+        printf("%s", memoria[(inicio + i) % entrada]);
     }
 
-    for (int i = 0; i < entrada; i++) {
+    for (i = 0; i < entrada; i++) {
         free(memoria[i]);
     }
     free(memoria);
 
     return 0;
 }
-
-
-
 int longlines(int entrada2) {
-
+int i = 0;
+int j = 0;
+char line[1024];
+int count = 0;
+char **memoria;
+int *longitudes; 
+int len = 0;
+int minimo = 0;
+int aux = 0;
+char *temporal;
 int entrada = 0;
         if(entrada2 == '\0'){
                 entrada = -10;
@@ -104,18 +114,14 @@ int entrada = 0;
         }
         entrada = entrada2 * -1;
 
-
-
     if (entrada <= 0) {
         fprintf(stderr, "Error: El número de líneas debe ser mayor que 0.\n");
         return -1;
     }
 
-    char line[1024];
-    int count = 0;
+        memoria = malloc(entrada * sizeof(char *));
+        longitudes = malloc(entrada * sizeof(int));
 
-    char **memoria = malloc(entrada * sizeof(char *));
-    int *longitudes = malloc(entrada * sizeof(int));
     if (memoria == NULL || longitudes == NULL) {
         fprintf(stderr, "Error al reservar memoria para punteros");
         free(memoria);
@@ -123,12 +129,12 @@ int entrada = 0;
         return -1;
     }
 
-    for (int i = 0; i < entrada; i++) {
+    for (i = 0; i < entrada; i++) {
         memoria[i] = malloc(1024 * sizeof(char));
         if (memoria[i] == NULL) {
             fprintf(stderr, "Error al reservar memoria para línea");
 
-            for (int j = 0; j < i; j++) {
+            for (j = 0; j < i; j++) {
                 free(memoria[j]);
             }
             free(memoria);
@@ -140,48 +146,45 @@ int entrada = 0;
     }
 
     while (fgets(line, sizeof(line), stdin) != NULL) {
-        int len = strlen(line);
+        len = strlen(line);
 
-        int min_index = 0;
-        for (int i = 1; i < entrada; i++) {
-            if (longitudes[i] < longitudes[min_index]) {
-                min_index = i;
+        minimo = 0;
+        for (i = 1; i < entrada; i++) {
+            if (longitudes[i] <= longitudes[minimo]) {
+                minimo = i;
             }
         }
 
-        if (len > longitudes[min_index]) {
-            strcpy(memoria[min_index], line);
-            longitudes[min_index] = len;
+        if (len > longitudes[minimo]) {
+            strcpy(memoria[minimo], line);
+            longitudes[minimo] = len;
         }
 
         count++;
     }
 
-    for (int i = 0; i < entrada - 1; i++) {
-        for (int j = 0; j < entrada - i - 1; j++) {
+    for (i = 0; i < entrada - 1; i++) {
+        for (j = 0; j < entrada - i - 1; j++) {
             if (longitudes[j] < longitudes[j + 1]) {
-                int temp_len = longitudes[j];
+                aux = longitudes[j];
                 longitudes[j] = longitudes[j + 1];
-                longitudes[j + 1] = temp_len;
-
-                char *temp_line = memoria[j];
+                longitudes[j + 1] = aux;
+                temporal = memoria[j];
                 memoria[j] = memoria[j + 1];
-                memoria[j + 1] = temp_line;
+                memoria[j + 1] = temporal;
             }
         }
     }
 
-    for (int i = 0; i < entrada; i++) {
+    for (i = 0; i < entrada; i++) {
         if (longitudes[i] > 0) {
             printf("%s", memoria[i]);
         }
     }
-
-    for (int i = 0; i < entrada; i++) {
+    for (i = 0; i < entrada; i++) {
         free(memoria[i]);
     }
     free(memoria);
     free(longitudes);
-
     return 0;
 }
