@@ -32,7 +32,7 @@ int main(int argc, char *argv[]){
         }else if(strcmp(argv[1], "-longlines") == 0){
                 longlines(entrada);
         }else{
-                printf("Error en los argumentos");
+                printf("Error en los argumentos\n");
                 return -1;
         }
 
