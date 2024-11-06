@@ -6,7 +6,7 @@
 int main(int argc, char *argv[]){
         int entrada = -10;
 	//control de argumentos
-        if (argc > 2 && argc < 4){
+        if (argc == 3){
                 char *end;
                 long valor = strtol(argv[2], &end, 10);
 
@@ -19,9 +19,12 @@ int main(int argc, char *argv[]){
 	}else if(argc >= 4){
 		printf("Demasiados parametros\n");
 		return -1;
-        }else if(argc <= 2){
+        }else if(argc == 2){
                 entrada = -10;
-        }
+        }else if(argc == 1){
+		printf("No has introducido parametros\n");
+		return -1;
+	}
         if(strcmp(argv[1], "-head") == 0){
                 head(entrada);
         }else if(strcmp(argv[1], "-tail") == 0){
