@@ -7,6 +7,7 @@ then
 	exit 1;
 fi
 
+#compilación de los archivos
 	gcc libreria.c -c -Wall -Wextra -Werror -o libreria.o
 	gcc test.c -c -Wall -Wextra -Werror -o test.o
 	ar -rv libreria.a libreria.o
