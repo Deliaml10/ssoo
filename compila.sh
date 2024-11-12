@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#control de parametros 
 if [ $# -ge 2 ]
 then
 	echo "Demasiados parámetros, no hay que introducir ninguno";
