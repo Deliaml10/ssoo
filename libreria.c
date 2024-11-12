@@ -13,7 +13,7 @@ int head(int entrada2) {
         if(entrada2 == '\0'){
                 entrada = -10;
         }
-
+        //Si la entrada es negativa da un error, sino se asigna la entrada
         if(entrada2 > 0) {
                 fprintf(stderr, "El numero introducido tiene que ser positivo\n");
         }else{
@@ -21,7 +21,7 @@ int head(int entrada2) {
         }
         entrada = entrada2 * -1;
  
-    //Se leen y se imprimen las n lineas
+    //Se leen e imprimen las n lineas
     while (count <= entrada-1 && fgets(line, sizeof(line), stdin) != NULL) { 
         printf("%s", line);
         count++;
@@ -44,6 +44,7 @@ int entrada = 0;
                 entrada = -10;
         }
 
+        //Si la entrada es negativa da un error, sino se asigna la entrada
         if(entrada2 > 0) {
                 fprintf(stderr, "El numero introducido tiene que ser positivo\n");
         }else{
@@ -119,7 +120,7 @@ int entrada = 0;
         if(entrada2 == '\0'){
                 entrada = -10;
         }
-
+        //Si la entrada es negativa da un error, sino se asigna la entrada
         if(entrada2 > 0) {
                 fprintf(stderr, "El numero introducido tiene que ser positivo\n");
         }else{
