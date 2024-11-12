@@ -5,8 +5,9 @@
 
 int main(int argc, char *argv[]){
         int entrada = -10;
-	//control de argumentos
+//control de argumentos
         if (argc == 3){
+                //comprueba que el argumento sea entero y positivo 
                 char *end;
                 long valor = strtol(argv[2], &end, 10);
 
@@ -25,6 +26,7 @@ int main(int argc, char *argv[]){
 		printf("No has introducido parametros\n");
 		return -1;
 	}
+//una vez comprobado los argumentos, se llama a la función correspondiente
         if(strcmp(argv[1], "-head") == 0){
                 head(entrada);
         }else if(strcmp(argv[1], "-tail") == 0){
