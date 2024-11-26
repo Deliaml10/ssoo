@@ -6,10 +6,33 @@
 #include <string.h>
 #include <fcntl.h> // Para open()
 
+// Manejo de las señales SIGINT y SIGTSTP
+void controlsigint() {
+    printf("\nmsh> ");
+    fflush(stdout);
+}
+
+void controlsigtstp() {
+    printf("\nmsh> ");
+    fflush(stdout);
+}
+
+//programa principal
 int main() {
     char input[1024]; // Buffer de entrada del usuario
     tline *line;
 
+    // Configuración de las señales SIGINT y SIGTSTP
+    if (signal(SIGINT, controlsigint) == SIG_ERR) {
+        fprintf(stderr, "Error al configurar SIGINT\n");
+        exit(-1);
+    }
+
+    if (signal(SIGTSTP, controlsigtstp) == SIG_ERR) {
+        fprintf(stderr, "Error al configurar SIGTSTP\n");
+        exit(-1);
+    }
+    
     while (1) { // Bucle principal del shell
         // Mostrar el prompt
         printf("msh> ");
@@ -33,6 +56,35 @@ int main() {
             printf("Se ha terminado el programa, hasta luego!\n");
             break;
         }
+
+        // Comando interno "cd"
+        if (strcmp(mandato.argv[0], "cd") == 0) {
+            char *nuevodir;
+
+            if (mandato.argc == 1) { // Si no se proporcionan argumentos
+                nuevodir = getenv("HOME");
+                if (nuevodir == NULL) {
+                    fprintf(stderr, "Error: La variable HOME no está definida.\n");
+                    continue;
+                }
+            } else {
+                nuevodir = mandato.argv[1]; // Usar el argumento como ruta
+            }
+
+            // Cambiar de directorio
+            if (chdir(nuevodir) != 0) {
+                fprintf(stderr, "Error al cambiar el directorio\n");
+            } else {
+                char diractual[1024];
+                if (getcwd(diractual, sizeof(diractual)) != NULL) {
+                    printf("Directorio actual: %s\n", diractual);
+                } else {
+                    fprintf(stderr, "Error al obtener el directorio actual\n");
+                }
+            }
+            continue; // Volver al prompt
+        }
+    
 
         // Caso de un solo mandato
         if (line->ncommands == 1) {
