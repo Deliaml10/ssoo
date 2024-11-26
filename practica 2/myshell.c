@@ -6,9 +6,32 @@
 #include <unistd.h>
 #include <string.h>
 
+// Manejo de las señales SIGINT y SIGTSTP
+void controlsigint() {
+    printf("\nmsh> ");
+    fflush(stdout);
+}
+
+void controlsigtstp() {
+    printf("\nmsh> ");
+    fflush(stdout);
+}
+
 int main(){
 char input[1024];  //HAY QUE HACERLO CON MALLOC
 tline *line;
+
+// Configuración de las señales SIGINT y SIGTSTP
+if (signal(SIGINT, controlsigint) == SIG_ERR) {
+	fprintf(stderr, "Error al configurar SIGINT\n");
+	exit(-1);
+}
+
+if (signal(SIGTSTP, controlsigtstp) == SIG_ERR) {
+	fprintf(stderr, "Error al configurar SIGTSTP\n");
+	exit(-1);
+}	
+	
 while(1){ //while para que el programa sea un bucle
 	//mostrar el prompt
 	printf("msh> ");
