@@ -4,7 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <string.h>
-#include <fcntl.h> // Para open()
+#include <fcntl.h>
 
 // Manejo de las señales SIGINT y SIGTSTP
 void controlsigint() {
@@ -17,20 +17,43 @@ void controlsigtstp() {
     fflush(stdout);
 }
 
+// Manjedo de procesos hijos en background
+void controlsighijo(){
+int status;
+pid_t pid;
+
+	while((pid = waitpid(-1, &status, WNOHANG)) > 0){
+		if(WIFEXITED(status)){
+			printf("El proceso %d ha terminado\n", pid);
+		}else if(WIFSIGNALED(status)){
+			printf("\nEl proceso %d ha terminado debido a una señal\n", pid);
+		}
+		fflush(stdout);
+	}
+
+	if(pid == -1){
+		fprintf(stderr, "Error al esperar en background\n");
+		exit(-1);
+	}
+}
+
+
 int main() {
-    char input[1024];  // HAY QUE HACERLO CON MALLOC
+    char *input = malloc(1024 * sizeof(char)); // Usar malloc para la entrada
+    if (input == NULL) {
+        perror("Error al asignar memoria\n");
+        exit(-1);
+    }
     tline *line;
 
     // Configuración de las señales SIGINT y SIGTSTP
-    if (signal(SIGINT, controlsigint) == SIG_ERR) {
-        fprintf(stderr, "Error al configurar SIGINT\n");
-        exit(-1);
-    }
-
-    if (signal(SIGTSTP, controlsigtstp) == SIG_ERR) {
-        fprintf(stderr, "Error al configurar SIGTSTP\n");
-        exit(-1);
-    }
+    if(signal(SIGINT, controlsigint) == SIG_ERR ||
+       signal(SIGTSTP, controlsigtstp) == SIG_ERR ||
+       signal(SIGCHLD, controlsighijo) == SIG_ERR){
+	fprintf(stderr, "Error al configurar las señales\n");
+	free(input);
+	exit(-1);
+	}
 
     while (1) { // Bucle principal del shell
         // Mostrar el prompt
@@ -38,7 +61,7 @@ int main() {
         fflush(stdout);
 
         // Leer entrada del usuario
-        if (fgets(input, sizeof(input), stdin) == NULL) { // Si solo se hace Enter
+        if (fgets(input, 1024, stdin) == NULL) { // Si solo se hace Enter
             printf("msh> ");
             fflush(stdout);
             continue;
@@ -100,7 +123,7 @@ int main() {
                 if (line->redirect_input != NULL) {
                     int fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
-                        fprintf(stderr, "Error al abrir el fichero de entrada");
+                        fprintf(stderr, "Error al abrir el fichero de entrada\n");
                         exit(-1);
                     }
                     dup2(fichero, 0);
@@ -111,7 +134,7 @@ int main() {
                 if (line->redirect_output != NULL) {
                     int fichero_salida = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fichero_salida < 0) {
-                        fprintf(stderr, "Error al abrir el fichero de salida");
+                        fprintf(stderr, "Error al abrir el fichero de salida\n");
                         exit(-1);
                     }
                     dup2(fichero_salida, 1);
@@ -120,20 +143,35 @@ int main() {
 
                 // Ejecutar el mandato
                 execvp(mandato.filename, mandato.argv);
-                fprintf(stderr, "Error al ejecutar el mandato");
+                fprintf(stderr, "Error al ejecutar el mandato\n");
                 exit(-1);
             } else {
                 // Proceso padre
-                int estado;
-                waitpid(pid, &estado, 0); // Esperar por el hijo
-            }
-        } else {
+		if(!line->background){
+			int estado;
+                	waitpid(pid, &estado, 0); // Esperar por el hijo
+            	}else{
+			printf("Proceso %d se está ejecutando en background\n", pid);
+	    	    }
+		}
+
+	} else {
             // Caso de múltiples mandatos enlazados con pipes
             int num_pipes = line->ncommands - 1; // Número de pipes necesarios
-            int pipes[num_pipes][2];            // Array de pipes
 
-            // Crear los pipes
+            // Asignar memoria para los pipes
+            int **pipes = malloc(num_pipes * sizeof(int *));
+            if (pipes == NULL) {
+                perror("Error al asignar memoria para pipes");
+                exit(-1);
+            }
+
             for (int i = 0; i < num_pipes; i++) {
+                pipes[i] = malloc(2 * sizeof(int));
+                if (pipes[i] == NULL) {
+                    perror("Error al asignar memoria para un pipe");
+                    exit(-1);
+                }
                 if (pipe(pipes[i]) < 0) {
                     perror("Error al crear el pipe");
                     exit(-1);
@@ -192,14 +230,23 @@ int main() {
             for (int i = 0; i < num_pipes; i++) {
                 close(pipes[i][0]);
                 close(pipes[i][1]);
+                free(pipes[i]); // Liberar memoria de cada pipe
             }
+            free(pipes); // Liberar memoria del array de pipes
 
             // Esperar a todos los procesos hijos
-            for (int i = 0; i < line->ncommands; i++) {
+	    if(!line->background){
+        	for (int i = 0; i < line->ncommands; i++) {
                 wait(NULL);
+		}
+	    }else{
+		printf("[Proceso ejecutandose en background]\n");
+
             }
         }
     }
 
+    free(input); // Liberar memoria de la entrada
     return 0;
 }
+
