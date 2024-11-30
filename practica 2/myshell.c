@@ -91,8 +91,8 @@ int main() {
             // Caso de un solo mandato
             pid_t pid = fork();
             if (pid < 0) {
-                perror("Error al crear el proceso hijo");
-                exit(EXIT_FAILURE);
+                fprintf(stderr, "Error al crear el proceso hijo");
+                exit(-1);
             }
 
             if (pid == 0) { // Proceso hijo
@@ -100,10 +100,10 @@ int main() {
                 if (line->redirect_input != NULL) {
                     int fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
-                        perror("Error al abrir el fichero de entrada");
+                        fprintf(stderr, "Error al abrir el fichero de entrada");
                         exit(-1);
                     }
-                    dup2(fichero, STDIN_FILENO);
+                    dup2(fichero, 0);
                     close(fichero);
                 }
 
@@ -111,16 +111,16 @@ int main() {
                 if (line->redirect_output != NULL) {
                     int fichero_salida = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fichero_salida < 0) {
-                        perror("Error al abrir el fichero de salida");
+                        fprintf(stderr, "Error al abrir el fichero de salida");
                         exit(-1);
                     }
-                    dup2(fichero_salida, STDOUT_FILENO);
+                    dup2(fichero_salida, 1);
                     close(fichero_salida);
                 }
 
                 // Ejecutar el mandato
                 execvp(mandato.filename, mandato.argv);
-                perror("Error al ejecutar el mandato");
+                fprintf(stderr, "Error al ejecutar el mandato");
                 exit(-1);
             } else {
                 // Proceso padre
@@ -131,7 +131,7 @@ int main() {
             // Caso de dos mandatos enlazados con pipe
             int tuberia[2];
             if (pipe(tuberia) < 0) {
-                perror("Error al crear el pipe");
+                fprintf(stderr, "Error al crear el pipe");
                 exit(-1);
             }
 
@@ -143,20 +143,20 @@ int main() {
                 if (line->redirect_input != NULL) {
                     int fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
-                        perror("Error al abrir el fichero de entrada");
+                        fprintf(stderr, "Error al abrir el fichero de entrada");
                         exit(-1);
                     }
-                    dup2(fichero, STDIN_FILENO);
+                    dup2(fichero, 0);
                     close(fichero);
                 }
 
                 // Redirigir salida estándar al extremo de escritura del pipe
-                dup2(tuberia[1], STDOUT_FILENO);
+                dup2(tuberia[1], 1);
                 close(tuberia[1]);
 
                 tcommand comando1 = line->commands[0];
                 execvp(comando1.filename, comando1.argv);
-                perror("Error al ejecutar el primer mandato");
+                fprintf(stderr, "Error al ejecutar el primer mandato");
                 exit(-1);
             }
 
@@ -165,23 +165,23 @@ int main() {
                 close(tuberia[1]); // Cerrar extremo de escritura
 
                 // Redirigir entrada estándar al extremo de lectura del pipe
-                dup2(tuberia[0], STDIN_FILENO);
+                dup2(tuberia[0], 0);
                 close(tuberia[0]);
 
                 // Redirección de salida
                 if (line->redirect_output != NULL) {
                     int salida = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (salida < 0) {
-                        perror("Error al abrir el fichero de salida");
+                        fprintf(stderr, "Error al abrir el fichero de salida");
                         exit(-1);
                     }
-                    dup2(salida, STDOUT_FILENO);
+                    dup2(salida, 1);
                     close(salida);
                 }
 
                 tcommand comando2 = line->commands[1];
                 execvp(comando2.filename, comando2.argv);
-                perror("Error al ejecutar el segundo mandato");
+                fprintf(stderr, "Error al ejecutar el segundo mandato");
                 exit(-1);
             }
 
