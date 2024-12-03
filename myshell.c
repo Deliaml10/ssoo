@@ -7,7 +7,8 @@
 #include <fcntl.h> // Para open()
 
 int main() {
-    char input[1024]; // Buffer de entrada del usuario
+    pid_t pid;
+    char input[1024]; // Esto hay que hacerlo con malloc
     tline *line;
 
     while (1) { // Bucle principal del shell
@@ -23,17 +24,15 @@ int main() {
 
         line = tokenize(input); // Tokenizar la entrada
 
-        // Si no se pasan mandatos, continuar
-        if (line == NULL || line->ncommands == 0) {
-            continue;
-        }
-
+	if(line == NULL || line->ncommands == 0){
+		continue;
+	}
         // Salir si el usuario escribe "exit"
         if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
             printf("Se ha terminado el programa, hasta luego!\n");
             break;
+// BORRAR TODOS LOS MANDATOS "LIBERAR MEMORIA"
         }
-
         // Caso de un solo mandato
         if (line->ncommands == 1) {
             tcommand mandato = line->commands[0];
@@ -42,39 +41,50 @@ int main() {
                 continue;
             }
 
-            pid_t pid = fork();
+            pid = fork();
             if (pid < 0) {
-                perror("Error al crear el proceso hijo");
-                exit(EXIT_FAILURE);
+                fprintf(stderr, "Error al crear el proceso hijo");
+                exit(-1);
             }
-
+	    // proceso hijo
             if (pid == 0) {
                 // Redirección de entrada
                 if (line->redirect_input != NULL) {
-                    int fd = open(line->redirect_input, O_RDONLY);
-                    if (fd < 0) {
-                        perror("Error al abrir el fichero de entrada");
-                        exit(EXIT_FAILURE);
+                    int fichero = open(line->redirect_input, O_RDONLY);
+                    if (fichero < 0) {
+                        fprintf(stderr, "Error al abrir el fichero de entrada");
+                        exit(-1);
                     }
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
+                    dup2(fichero, 0);
+                    close(fichero);
                 }
 
                 // Redirección de salida
                 if (line->redirect_output != NULL) {
-                    int fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd < 0) {
-                        perror("Error al abrir el fichero de salida");
-                        exit(EXIT_FAILURE);
+                    int fichero = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fichero < 0) {
+                        fprintf(stderr, "Error al abrir el fichero de salida");
+                        exit(-1);
                     }
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
+                    dup2(fichero, 1);
+                    close(fichero);
                 }
+
+		// Redireccion de salida error
+		if(line->redirect_error != NULL){
+			int fichero = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+			if(fichero < 0){
+				fprintf(stderr, "Error al abrir el fichero de salida error");
+				exit(-1);
+			}
+			dup2(fichero, 2);
+			close(fichero);
+		}
 
                 // Ejecutar el mandato
                 execvp(mandato.filename, mandato.argv);
-                perror("Error al ejecutar el mandato");
-                exit(EXIT_FAILURE);
+                fprintf(stderr, "Error al ejecutar el mandato");
+                exit(-1);
             } else {
                 // Proceso padre
                 int estado;
@@ -82,85 +92,103 @@ int main() {
             }
         }
 
-        // Caso de dos mandatos enlazados con pipe
-        else if (line->ncommands == 2) {
-            int pipefd[2]; // Crear el pipe
-            if (pipe(pipefd) < 0) {
-                perror("Error al crear el pipe");
-                exit(EXIT_FAILURE);
-            }
+        // Caso de mas de dos
+        else if (line->ncommands >= 2) {
+		int numero_pipes = line->ncommands - 1;
+		int **tuberia = malloc(numero_pipes * sizeof(int *));
+		if(tuberia == NULL){
+			fprintf(stderr, "Error al asignar memoria para crear la tuberia");
+			exit(-1);
+		}
+		for (int i = 0; i < numero_pipes; i++){
+			tuberia[i] = malloc(2 * sizeof(int));
+			if(pipe(tuberia[i]) < 0){
+				fprintf(stderr, "Error al crear los extremos del pipe");
+				exit(-1);
+			}
+		}
 
-            // Primer hijo (mandato 1)
-            pid_t pid1 = fork();
-            if (pid1 < 0) {
-                perror("Error al crear el primer proceso hijo");
-                exit(EXIT_FAILURE);
-            }
+		for (int i = 0; i < line->ncommands; i++){
+			pid = fork();
 
-            if (pid1 == 0) {
-                close(pipefd[0]); // Cerrar extremo de lectura del pipe
+			if (pid < 0) {
+				fprintf(stderr, "Error al crear el primer proceso hijo");
+				exit(-1);
+			}
 
-                // Redirección de entrada
-                if (line->redirect_input != NULL) {
-                    int fd = open(line->redirect_input, O_RDONLY);
-                    if (fd < 0) {
-                        perror("Error al abrir el fichero de entrada");
-                        exit(EXIT_FAILURE);
-                    }
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
-                }
+			if (pid == 0) {
+				if(i == 0){
+					//redireccion entrada estandar
+					if(line->redirect_input != NULL){
+						int fichero = open(line->redirect_input, O_RDONLY);
+						if(fichero < 0){
+							fprintf(stderr, "Error al abrir el fichero de entrada");
+							exit(-1);
+						}
+						dup2(fichero, 0);
+						close(fichero);
+					}
+					close(tuberia[i][0]);  //cierro extremo lectura
+					//salida al pipe
+					dup2(tuberia[i][1], 1);
+					close(tuberia[i][1]); //cierro extremo de escritura
+				}else if(i > 0 && i < (line->ncommands - 1)){
 
-                // Redirigir salida estándar al extremo de escritura del pipe
-                dup2(pipefd[1], STDOUT_FILENO);
-                close(pipefd[1]);
+					//entrada pipe
+					close(tuberia[i-1][1]); //cierro extremo de escritura del pipe 1
+					dup2(tuberia[i-1][0], 0);
+					close(tuberia[i-1][0]);   //cierro el extremo de lectura del pipe 1
+					//salida pipe
+					close(tuberia[i][0]);  //cierro extremo de lectura del pipe 2
+					dup2(tuberia[i][1], 1);
+					close(tuberia[i][1]);  //cierro extremo de ecritura del pipe 2
 
-                tcommand comando1 = line->commands[0];
-                execvp(comando1.filename, comando1.argv);
-                perror("Error al ejecutar el primer mandato");
-                exit(EXIT_FAILURE);
-            }
+				}else if( i == line->ncommands - 1){
+					//entrada pipe
+					close(tuberia[i-1][1]);  //cierro extremo de escritura
+					dup2(tuberia[i-1][0], 0);
+					//salida estandar
+					if(line->redirect_output != NULL){
+						int fichero = open(line->redirect_output, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+						if(fichero < 0){
+							fprintf(stderr, "Error al abrir el fichero de salida");
+							exit(-1);
+						}
+						dup2(fichero, 1);
+						close(fichero);
+					}
+					if(line->redirect_error != NULL){
+						int fichero = open(line->redirect_error, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+						if(fichero < 0){
+							fprintf(stderr, "Error al abrir el fichero de salida error");
+							exit(-1);
+						}
+						dup2(fichero, 2);
+						close(fichero);
+					}
+					close(tuberia[i-1][0]);  //cierro extremo de lectura
+				}
 
-            // Segundo hijo (mandato 2)
-            pid_t pid2 = fork();
-            if (pid2 < 0) {
-                perror("Error al crear el segundo proceso hijo");
-                exit(EXIT_FAILURE);
-            }
+				tcommand mandato = line->commands[i];
+				execvp(mandato.filename, mandato.argv);
+				fprintf(stderr, "Error al ejecutar los mandatos");
+				exit(-1);
 
-            if (pid2 == 0) {
-                close(pipefd[1]); // Cerrar extremo de escritura del pipe
-
-                // Redirigir entrada estándar al extremo de lectura del pipe
-                dup2(pipefd[0], STDIN_FILENO);
-                close(pipefd[0]);
-
-                // Redirección de salida
-                if (line->redirect_output != NULL) {
-                    int fd = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd < 0) {
-                        perror("Error al abrir el fichero de salida");
-                        exit(EXIT_FAILURE);
-                    }
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                }
-
-                tcommand comando2 = line->commands[1];
-                execvp(comando2.filename, comando2.argv);
-                perror("Error al ejecutar el segundo mandato");
-                exit(EXIT_FAILURE);
-            }
-
+			}
+	}
             // Proceso padre
-            close(pipefd[0]);
-            close(pipefd[1]);
-            waitpid(pid1, NULL, 0); // Esperar al primer hijo
-            waitpid(pid2, NULL, 0); // Esperar al segundo hijo
+	for(int i = 0; i < line->ncommands-1; i++){
+            close(tuberia[i][0]);
+            close(tuberia[i][1]);
+	}
+	for(int i = 0; i < line->ncommands; i++){
+            wait(NULL); // Esperar al primer hijo
+	}
+	    free(tuberia);
         } else {
-            fprintf(stderr, "Solo se permiten hasta 2 mandatos enlazados con '|'\n");
+            fprintf(stderr, "Error en algún lado\n");
         }
     }
-
+    free(line);
     return 0;
 }
