@@ -27,19 +27,50 @@ int main() {
 	if(line == NULL || line->ncommands == 0){
 		continue;
 	}
+
+	//comando cd
+	if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "cd") == 0){
+		char *nuevodir;
+		tcommand mandato = line->commands[0];
+		if(mandato.argc == 1){
+			nuevodir = getenv("HOME");
+			if(nuevodir == NULL){
+				fprintf(stderr, "El directorio no está definido\n");
+				continue;
+			}
+		}else{
+			nuevodir = mandato.argv[1];
+		}
+
+		if(chdir(nuevodir) != 0){
+			fprintf(stderr, "Error al cambiar el directorio\n");
+			continue;
+		}else{
+			char diractual[1024];
+			if(getcwd(diractual, sizeof(diractual)) != NULL){
+				printf("El directorio actual es: %s\n", diractual);
+			}else{
+				fprintf(stderr, "Error al cambiar el directorio actual\n");
+				continue;
+			}
+		}
+	}
+
+
+
         // Salir si el usuario escribe "exit"
-        if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
+        else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
             printf("Se ha terminado el programa, hasta luego!\n");
             break;
 // BORRAR TODOS LOS MANDATOS "LIBERAR MEMORIA"
         }
         // Caso de un solo mandato
-        if (line->ncommands == 1) {
+        else if (line->ncommands == 1) {
             tcommand mandato = line->commands[0];
-            if (mandato.filename == NULL) {
-                fprintf(stderr, "El mandato no existe\n");
-                continue;
-            }
+
+	    if(mandato.filename == NULL){
+		fprintf(stderr, "El mandato no existe");
+	    }
 
             pid = fork();
             if (pid < 0) {
@@ -55,8 +86,10 @@ int main() {
                         fprintf(stderr, "Error al abrir el fichero de entrada");
                         exit(-1);
                     }
+		    printf("FICHERO ABIERTO");
                     dup2(fichero, 0);
                     close(fichero);
+
                 }
 
                 // Redirección de salida
@@ -128,24 +161,25 @@ int main() {
 						dup2(fichero, 0);
 						close(fichero);
 					}
-					close(tuberia[i][0]);  //cierro extremo lectura
 					//salida al pipe
 					dup2(tuberia[i][1], 1);
-					close(tuberia[i][1]); //cierro extremo de escritura
+					for(int j = 0; j < line->ncommands-1; j++){
+						close(tuberia[j][0]);
+						close(tuberia[j][1]);
+					}
 				}else if(i > 0 && i < (line->ncommands - 1)){
 
 					//entrada pipe
-					close(tuberia[i-1][1]); //cierro extremo de escritura del pipe 1
 					dup2(tuberia[i-1][0], 0);
-					close(tuberia[i-1][0]);   //cierro el extremo de lectura del pipe 1
 					//salida pipe
-					close(tuberia[i][0]);  //cierro extremo de lectura del pipe 2
 					dup2(tuberia[i][1], 1);
-					close(tuberia[i][1]);  //cierro extremo de ecritura del pipe 2
+					for(int j = 0; j < line->ncommands-1; j++){
+						close(tuberia[j][0]);
+						close(tuberia[j][1]);
+					}
 
 				}else if( i == line->ncommands - 1){
 					//entrada pipe
-					close(tuberia[i-1][1]);  //cierro extremo de escritura
 					dup2(tuberia[i-1][0], 0);
 					//salida estandar
 					if(line->redirect_output != NULL){
@@ -166,8 +200,13 @@ int main() {
 						dup2(fichero, 2);
 						close(fichero);
 					}
-					close(tuberia[i-1][0]);  //cierro extremo de lectura
+
+					for(int j=0; j<line->ncommands-1; j++){
+						close(tuberia[j][0]);
+						close(tuberia[j][1]);
+					}
 				}
+
 
 				tcommand mandato = line->commands[i];
 				execvp(mandato.filename, mandato.argv);
@@ -176,19 +215,19 @@ int main() {
 
 			}
 	}
-            // Proceso padre
-	for(int i = 0; i < line->ncommands-1; i++){
-            close(tuberia[i][0]);
-            close(tuberia[i][1]);
-	}
-	for(int i = 0; i < line->ncommands; i++){
-            wait(NULL); // Esperar al primer hijo
-	}
-	    free(tuberia);
+            	// Proceso padre
+		for(int i = 0; i < line->ncommands-1; i++){
+            		close(tuberia[i][0]);
+            		close(tuberia[i][1]);
+		}
+		for(int i = 0; i < line->ncommands; i++){
+            		wait(NULL); // Esperar al primer hijo
+		}
+	free(tuberia);
         } else {
-            fprintf(stderr, "Error en algún lado\n");
+		fprintf(stderr, "Hay algún error");
+		exit(-1);
         }
     }
-    free(line);
     return 0;
 }
