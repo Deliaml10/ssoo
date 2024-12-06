@@ -6,6 +6,18 @@
 #include <string.h>
 #include <fcntl.h> // Para open()
 #include <signal.h>
+#include <sys/stat.h>
+
+typedef struct job {
+    int id;  //numero del trabajo
+    pid_t pid;
+    char *command;
+    char *estado;
+}job;
+
+job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
+int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
+
 
 void controlZ(){
     printf("\nmsh> ");
@@ -19,15 +31,36 @@ void controlC(){
 // borrar el proceso, hay que pasarle el PID
 }
 
-typedef struct job {
-    int id;  //numero del trabajo
-    pid_t pid;
-    char *command;
-    char *estado;
-}job;
+void funcionumask(tline *line) {
+    if (line->ncommands == 1 && line->commands[0].argc > 2) {
+        fprintf(stderr, "El comando umask solo puede tener un argumento o ninguno.\n");
+        return;
+    }
+    if (line->ncommands == 1 && line->commands[0].argc == 2) {
+        char *arg = line->commands[0].argv[1];
+        
+        for (int i = 0; arg[i] != '\0'; i++) {
+            if (arg[i] < '0' || arg[i] > '7') {
+                fprintf(stderr, "El argumento de umask debe ser un número octal válido.\n");
+                return;
+            }
+        }
+        
+        int mask = strtol(arg, NULL, 8);
 
-job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
-int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
+        if (mask < 0 || mask > 0777) {
+            fprintf(stderr, "El valor de umask debe ser un número octal.\n");
+            return;
+        }
+        umask(mask); // Establece la máscara de permisos
+        printf("Máscara de permisos cambiada a: %03o\n", mask);
+    } else {
+        // Si no se pasa argumento, mostrar la máscara actual
+        mode_t actualumask = umask(0); // Obtiene la máscara actual
+        umask(actualumask); // Restaura la máscara
+        printf("Máscara de permisos actual: %03o\n", actualumask);
+    }
+}
 
 void addjob(pid_t pid, char *command, char *estado){
     trabajos = realloc(trabajos, sizeof(struct job) * (cuenta + 1));
@@ -183,6 +216,25 @@ int main() {
         else if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "jobs") == 0){
             	trabajosterminados();
 		showjob();
+        }
+        
+        
+        int encontrado = 0;
+        for (int i = 0; i < line->ncommands; i++) {
+            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
+                  encontrado = 1;
+                  break;
+            }
+        }
+        
+        if (encontrado && line->ncommands > 1) {
+            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
+            continue;
+        }
+
+        if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
+            funcionumask(line);  // Llamamos a la función ejecutar_umask
+            continue;
         }
 
         // Salir si el usuario escribe "exit"
