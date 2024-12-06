@@ -10,11 +10,13 @@
 void controlZ(){
     printf("\nmsh> ");
     fflush(stdout);
+// cambiar estado del trabajo parado, hay que pasarle el PID y "Stopped"
 }
 
 void controlC(){
     printf("\nmsh> ");
     fflush(stdout);
+// borrar el proceso, hay que pasarle el PID
 }
 
 typedef struct job {
@@ -49,6 +51,9 @@ void showjob(){
     for(int i = 0; i < cuenta; i++){
         printf("[%d] %s %s\n", trabajos[i].id, trabajos[i].estado, trabajos[i].command);
     }
+	if(cuenta == 0){
+		printf("No hay trabajos en segundo plano, ni parados ni ejecutandose\n");
+	}
 }
 
 void borrarjob(pid_t pid){
@@ -57,14 +62,14 @@ void borrarjob(pid_t pid){
             free(trabajos[i].command);
             free(trabajos[i].estado);
             for(int j = i; j < cuenta - 1; j++){
-                trabajos[j] = trabajos[j + 1]; // Corrección aquí, no "trabajos[j-1]"
+                trabajos[j] = trabajos[j + 1];
             }
             cuenta--;
 
             trabajos = realloc(trabajos, sizeof(struct job) * cuenta);
             // Aquí se tiene en cuenta la variable "cuenta" porque si es igual a 0 el realloc daría NULL si o si, pero eso no sería un error
             if(trabajos == NULL && cuenta > 0){
-                fprintf(stderr, "Error al reasignar memoria para los trabajos");
+                fprintf(stderr, "Error al reasignar memoria para los trabajos\n");
                 exit(-1);
             }
         }
@@ -100,6 +105,7 @@ void trabajosterminados(){
 
     while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
         borrarjob(pid);
+	printf("El trabajo con PID: %d, ha terminado\n", pid);
     }
 }
 
