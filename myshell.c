@@ -19,18 +19,6 @@ job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
 int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
 
 
-void controlZ(){
-    printf("\nmsh> ");
-    fflush(stdout);
-// cambiar estado del trabajo parado, hay que pasarle el PID y "Stopped"
-}
-
-void controlC(){
-    printf("\nmsh> ");
-    fflush(stdout);
-// borrar el proceso, hay que pasarle el PID
-}
-
 void funcionumask(tline *line) {
     if (line->ncommands == 1 && line->commands[0].argc > 2) {
         fprintf(stderr, "El comando umask solo puede tener un argumento o ninguno.\n");
@@ -153,21 +141,58 @@ void moverforeground(pid_t pid){
     }
 }
 
+void controlZ() {
+    pid_t pidHijo = 0; 
+
+    for (int i = 0; i < cuenta; i++) {
+        if (strcmp(trabajos[i].estado, "Running") == 0) {
+            pidHijo = trabajos[i].pid;
+            break; 
+        }
+    }
+
+    if (pidHijo != 0) {
+        kill(pidHijo, SIGSTOP);  
+        printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pidHijo);
+        cambiarestado(pidHijo, "Stopped"); 
+        addjob(pidHijo, "Proceso detenido", "Stopped");  
+    }
+
+    printf("\nmsh> "); 
+    fflush(stdout);
+}
+
+
+void controlC() {
+    pid_t pidHijo = 0;  
+
+    for (int i = 0; i < cuenta; i++) {
+        if (strcmp(trabajos[i].estado, "Running") == 0) {
+            pidHijo = trabajos[i].pid;
+            break;
+        }
+    }
+
+    if (pidHijo != 0) {
+        kill(pidHijo, SIGKILL);  
+        printf("\nEl proceso con PID %d ha sido terminado\n", pidHijo);
+        borrarjob(pidHijo); 
+    }
+    printf("\nmsh> "); 
+    fflush(stdout);
+}
+
 void exitShell(tline *line) {
-    // Esperar a que todos los trabajos en segundo plano terminen
     for (int i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
             pid_t pid = trabajos[i].pid;
             int estado;
-            // Esperamos a que el trabajo termine
             waitpid(pid, &estado, 0);
             printf("El trabajo con PID %d ha terminado\n", pid);
-            // Borramos el trabajo de la lista
             borrarjob(pid);
         }
     }
 
-    // Borrar todos los trabajos en memoria
     borrartrabajos();
 
     printf("Se ha terminado el programa, hasta luego!\n");
