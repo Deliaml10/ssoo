@@ -153,6 +153,26 @@ void moverforeground(pid_t pid){
     }
 }
 
+void exitShell(tline *line) {
+    // Esperar a que todos los trabajos en segundo plano terminen
+    for (int i = 0; i < cuenta; i++) {
+        if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
+            pid_t pid = trabajos[i].pid;
+            int estado;
+            // Esperamos a que el trabajo termine
+            waitpid(pid, &estado, 0);
+            printf("El trabajo con PID %d ha terminado\n", pid);
+            // Borramos el trabajo de la lista
+            borrarjob(pid);
+        }
+    }
+
+    // Borrar todos los trabajos en memoria
+    borrartrabajos();
+
+    printf("Se ha terminado el programa, hasta luego!\n");
+}
+
 int main() {
     pid_t pid;
     char input[1024]; // Esto hay que hacerlo con malloc
@@ -239,7 +259,7 @@ int main() {
 
         // Salir si el usuario escribe "exit"
         else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
-            printf("Se ha terminado el programa, hasta luego!\n");
+            exitShell(line);
             break;
         }
 
