@@ -184,6 +184,24 @@ int main() {
         if(line == NULL || line->ncommands == 0){
             continue;
         }
+        
+        int encontrado = 0;
+        for (int i = 0; i < line->ncommands; i++) {
+            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
+                  encontrado = 1;
+                  break;
+            }
+        }
+        
+        if (encontrado && line->ncommands > 1) {
+            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
+            continue;
+        }
+
+        if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
+            funcionumask(line);            
+            continue;
+        }
 
         //comando cd
         if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "cd") == 0){
@@ -218,24 +236,6 @@ int main() {
 		showjob();
         }
         
-        
-        int encontrado = 0;
-        for (int i = 0; i < line->ncommands; i++) {
-            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
-                  encontrado = 1;
-                  break;
-            }
-        }
-        
-        if (encontrado && line->ncommands > 1) {
-            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
-            continue;
-        }
-
-        if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
-            funcionumask(line);  // Llamamos a la función ejecutar_umask
-            continue;
-        }
 
         // Salir si el usuario escribe "exit"
         else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
@@ -424,3 +424,4 @@ int main() {
     }
     return 0;
 }
+
