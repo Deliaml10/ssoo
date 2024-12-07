@@ -26,14 +26,14 @@ void funcionumask(tline *line) {
     }
     if (line->ncommands == 1 && line->commands[0].argc == 2) {
         char *arg = line->commands[0].argv[1];
-        
+
         for (int i = 0; arg[i] != '\0'; i++) {
             if (arg[i] < '0' || arg[i] > '7') {
                 fprintf(stderr, "El argumento de umask debe ser un número octal válido.\n");
                 return;
             }
         }
-        
+
         int mask = strtol(arg, NULL, 8);
 
         if (mask < 0 || mask > 0777) {
@@ -41,12 +41,12 @@ void funcionumask(tline *line) {
             return;
         }
         umask(mask); // Establece la máscara de permisos
-        printf("Máscara de permisos cambiada a: %03o\n", mask);
+        printf("Máscara de permisos cambiada a: %d\n", mask);
     } else {
         // Si no se pasa argumento, mostrar la máscara actual
         mode_t actualumask = umask(0); // Obtiene la máscara actual
         umask(actualumask); // Restaura la máscara
-        printf("Máscara de permisos actual: %03o\n", actualumask);
+        printf("Máscara de permisos actual: %d\n", actualumask);
     }
 }
 
@@ -142,29 +142,36 @@ void moverforeground(pid_t pid){
 }
 
 void controlZ() {
-    pid_t pidHijo = 0; 
-
+    pid_t pidHijo = 0;
+    char *command;
     for (int i = 0; i < cuenta; i++) {
         if (strcmp(trabajos[i].estado, "Running") == 0) {
             pidHijo = trabajos[i].pid;
-            break; 
+            command = trabajos[i].command;
+	    break;
         }
     }
 
     if (pidHijo != 0) {
-        kill(pidHijo, SIGSTOP);  
+        kill(pidHijo, SIGSTOP);
         printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pidHijo);
-        cambiarestado(pidHijo, "Stopped"); 
-        addjob(pidHijo, "Proceso detenido", "Stopped");  
+	for( int j = 0; j < cuenta; j++){
+		if(trabajos[j].pid == pidHijo){
+    		    	cambiarestado(pidHijo, "Stopped");
+		}else{
+			addjob(pidHijo, command, "Stopped");
+		}
+	}
+
     }
 
-    printf("\nmsh> "); 
+    printf("\nmsh> ");
     fflush(stdout);
 }
 
 
 void controlC() {
-    pid_t pidHijo = 0;  
+    pid_t pidHijo = 0;
 
     for (int i = 0; i < cuenta; i++) {
         if (strcmp(trabajos[i].estado, "Running") == 0) {
@@ -174,15 +181,15 @@ void controlC() {
     }
 
     if (pidHijo != 0) {
-        kill(pidHijo, SIGKILL);  
+        kill(pidHijo, SIGKILL);
         printf("\nEl proceso con PID %d ha sido terminado\n", pidHijo);
-        borrarjob(pidHijo); 
+        borrarjob(pidHijo);
     }
-    printf("\nmsh> "); 
+    printf("\nmsh> ");
     fflush(stdout);
 }
 
-void exitShell(tline *line) {
+void exitShell() {
     for (int i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
             pid_t pid = trabajos[i].pid;
@@ -229,22 +236,25 @@ int main() {
         if(line == NULL || line->ncommands == 0){
             continue;
         }
-        
+
         int encontrado = 0;
         for (int i = 0; i < line->ncommands; i++) {
-            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
+            if(strcmp(line->commands[i].argv[0], "exit") == 0 ||
+	       strcmp(line->commands[i].argv[0], "cd") == 0 ||
+	       strcmp(line->commands[i].argv[0], "umask") == 0 ||
+	       strcmp(line->commands[i].argv[0], "bg") == 0) {
                   encontrado = 1;
                   break;
             }
         }
-        
+
         if (encontrado && line->ncommands > 1) {
-            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
+            fprintf(stderr, "Uno de los mandatos no puede ejecutarse con pipes.\n");
             continue;
         }
 
         if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
-            funcionumask(line);            
+            funcionumask(line);
             continue;
         }
 
@@ -280,11 +290,11 @@ int main() {
             	trabajosterminados();
 		showjob();
         }
-        
+
 
         // Salir si el usuario escribe "exit"
         else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
-            exitShell(line);
+            exitShell();
             break;
         }
 
@@ -469,4 +479,3 @@ int main() {
     }
     return 0;
 }
-
