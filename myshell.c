@@ -127,7 +127,7 @@ void trabajosterminados(){
 
     while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
         borrarjob(pid);
-	printf("El trabajo con PID: %d, ha terminado", pid);
+	printf("El trabajo con PID: %d, ha terminado\n", pid);
 	fflush(stdout);
     }
 }
@@ -331,7 +331,7 @@ int main() {
                 int estado;
                 if(line->background == 1){
                     printf("El proceso con PID: %d, se está ejecutando en background\n", pid);
-                    addjob(pid, line->commands[0].argv[0], "Running"); // Cambié "line->commands[i]" por "line->commands[0].argv[0]"
+                    addjob(pid, input, "Running"); // Cambié "line->commands[i]" por "line->commands[0].argv[0]"
                     continue;
                 } else {
                     waitpid(pid, &estado, WUNTRACED); // Esperar a que el hijo termine
@@ -437,9 +437,7 @@ int main() {
 		}
 		if(line->background == 1){
 			printf("El proceso con PID: %d, se está ejecutando en background\n", pid);
-			for(int i = 0; i < line->ncommands -1; i++){
-				addjob(pid, line->commands[i].argv[0], "Running");
-			}
+			    addjob(pid, input, "Running");
 			continue;
 		}else{
 			for(int i = 0; i < line->ncommands; i++){
