@@ -17,7 +17,8 @@ typedef struct job {
 
 job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
 int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
-
+char input[1024]; // Esto hay que hacerlo con malloc
+pid_t pid;
 
 void funcionumask(tline *line) {
     if (line->ncommands == 1 && line->commands[0].argc > 2) {
@@ -26,14 +27,14 @@ void funcionumask(tline *line) {
     }
     if (line->ncommands == 1 && line->commands[0].argc == 2) {
         char *arg = line->commands[0].argv[1];
-
+        
         for (int i = 0; arg[i] != '\0'; i++) {
             if (arg[i] < '0' || arg[i] > '7') {
                 fprintf(stderr, "El argumento de umask debe ser un número octal válido.\n");
                 return;
             }
         }
-
+        
         int mask = strtol(arg, NULL, 8);
 
         if (mask < 0 || mask > 0777) {
@@ -41,12 +42,12 @@ void funcionumask(tline *line) {
             return;
         }
         umask(mask); // Establece la máscara de permisos
-        printf("Máscara de permisos cambiada a: %d\n", mask);
+        printf("Máscara de permisos cambiada a: %03o\n", mask);
     } else {
         // Si no se pasa argumento, mostrar la máscara actual
         mode_t actualumask = umask(0); // Obtiene la máscara actual
         umask(actualumask); // Restaura la máscara
-        printf("Máscara de permisos actual: %d\n", actualumask);
+        printf("Máscara de permisos actual: %03o\n", actualumask);
     }
 }
 
@@ -126,7 +127,8 @@ void trabajosterminados(){
 
     while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
         borrarjob(pid);
-	printf("El trabajo con PID: %d, ha terminado\n", pid);
+	printf("El trabajo con PID: %d, ha terminado", pid);
+	fflush(stdout);
     }
 }
 
@@ -142,54 +144,31 @@ void moverforeground(pid_t pid){
 }
 
 void controlZ() {
-    pid_t pidHijo = 0;
-    char *command;
-    for (int i = 0; i < cuenta; i++) {
-        if (strcmp(trabajos[i].estado, "Running") == 0) {
-            pidHijo = trabajos[i].pid;
-            command = trabajos[i].command;
-	    break;
-        }
+    if (pid > 0) {
+    addjob(pid, input, "Stopped");
+
+    printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pid);
+    pid= -1;
+    } else {
+        printf("\nmsh> ");
     }
-
-    if (pidHijo != 0) {
-        kill(pidHijo, SIGSTOP);
-        printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pidHijo);
-	for( int j = 0; j < cuenta; j++){
-		if(trabajos[j].pid == pidHijo){
-    		    	cambiarestado(pidHijo, "Stopped");
-		}else{
-			addjob(pidHijo, command, "Stopped");
-		}
-	}
-
-    }
-
-    printf("\nmsh> ");
     fflush(stdout);
 }
 
 
 void controlC() {
-    pid_t pidHijo = 0;
-
-    for (int i = 0; i < cuenta; i++) {
-        if (strcmp(trabajos[i].estado, "Running") == 0) {
-            pidHijo = trabajos[i].pid;
-            break;
-        }
+    if (pid > 0) {
+        kill(pid, SIGKILL);  
+        printf("\nEl proceso con PID %d ha sido terminado\n", pid);
+        borrarjob(pid); 
+        pid= -1;
+    } else {
+        printf("\nmsh> ");
     }
-
-    if (pidHijo != 0) {
-        kill(pidHijo, SIGKILL);
-        printf("\nEl proceso con PID %d ha sido terminado\n", pidHijo);
-        borrarjob(pidHijo);
-    }
-    printf("\nmsh> ");
     fflush(stdout);
 }
 
-void exitShell() {
+void exitShell(tline *line) {
     for (int i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
             pid_t pid = trabajos[i].pid;
@@ -206,8 +185,7 @@ void exitShell() {
 }
 
 int main() {
-    pid_t pid;
-    char input[1024]; // Esto hay que hacerlo con malloc
+    
     tline *line;
 
     if(signal(SIGTSTP, controlZ) == SIG_ERR){
@@ -236,25 +214,22 @@ int main() {
         if(line == NULL || line->ncommands == 0){
             continue;
         }
-
+        
         int encontrado = 0;
         for (int i = 0; i < line->ncommands; i++) {
-            if(strcmp(line->commands[i].argv[0], "exit") == 0 ||
-	       strcmp(line->commands[i].argv[0], "cd") == 0 ||
-	       strcmp(line->commands[i].argv[0], "umask") == 0 ||
-	       strcmp(line->commands[i].argv[0], "bg") == 0) {
+            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
                   encontrado = 1;
                   break;
             }
         }
-
+        
         if (encontrado && line->ncommands > 1) {
-            fprintf(stderr, "Uno de los mandatos no puede ejecutarse con pipes.\n");
+            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
             continue;
         }
 
         if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
-            funcionumask(line);
+            funcionumask(line);            
             continue;
         }
 
@@ -290,11 +265,11 @@ int main() {
             	trabajosterminados();
 		showjob();
         }
-
+        
 
         // Salir si el usuario escribe "exit"
         else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
-            exitShell();
+            exitShell(line);
             break;
         }
 
@@ -359,7 +334,7 @@ int main() {
                     addjob(pid, line->commands[0].argv[0], "Running"); // Cambié "line->commands[i]" por "line->commands[0].argv[0]"
                     continue;
                 } else {
-                    waitpid(pid, &estado, 0); // Esperar a que el hijo termine
+                    waitpid(pid, &estado, WUNTRACED); // Esperar a que el hijo termine
                 }
             }
         }
