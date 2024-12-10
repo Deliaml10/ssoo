@@ -126,9 +126,7 @@ void trabajosterminados(){
     pid_t pid;
 
     while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
-        borrarjob(pid);
-	printf("El trabajo con PID: %d, ha terminado\n", pid);
-	fflush(stdout);
+	borrarjob(pid);
     }
 }
 
@@ -145,14 +143,15 @@ void moverforeground(pid_t pid){
 
 void controlZ() {
     if (pid > 0) {
-    addjob(pid, input, "Stopped");
-
+    cambiarestado(pid, "Stopped");
     printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pid);
+    printf("\nmsh> ");
+    fflush(stdout);
     pid= -1;
     } else {
         printf("\nmsh> ");
+	fflush(stdout);
     }
-    fflush(stdout);
 }
 
 
@@ -160,7 +159,8 @@ void controlC() {
     if (pid > 0) {
         kill(pid, SIGKILL);  
         printf("\nEl proceso con PID %d ha sido terminado\n", pid);
-        borrarjob(pid); 
+        printf("\nmsh> ");
+	borrarjob(pid); 
         pid= -1;
     } else {
         printf("\nmsh> ");
@@ -168,7 +168,7 @@ void controlC() {
     fflush(stdout);
 }
 
-void exitShell(tline *line) {
+void exitShell() {
     for (int i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
             pid_t pid = trabajos[i].pid;
