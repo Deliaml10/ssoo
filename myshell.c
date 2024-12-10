@@ -27,14 +27,14 @@ void funcionumask(tline *line) {
     }
     if (line->ncommands == 1 && line->commands[0].argc == 2) {
         char *arg = line->commands[0].argv[1];
-        
+
         for (int i = 0; arg[i] != '\0'; i++) {
             if (arg[i] < '0' || arg[i] > '7') {
                 fprintf(stderr, "El argumento de umask debe ser un número octal válido.\n");
                 return;
             }
         }
-        
+
         int mask = strtol(arg, NULL, 8);
 
         if (mask < 0 || mask > 0777) {
@@ -127,6 +127,8 @@ void trabajosterminados(){
 
     while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
 	borrarjob(pid);
+	printf("El trabajo con PID: %d ha terminado\n", pid);
+	fflush(stdout);
     }
 }
 
@@ -143,11 +145,24 @@ void moverforeground(pid_t pid){
 
 void controlZ() {
     if (pid > 0) {
-    cambiarestado(pid, "Stopped");
-    printf("\nEl proceso con PID %d ha sido detenido y enviado a segundo plano\n", pid);
-    printf("\nmsh> ");
-    fflush(stdout);
-    pid= -1;
+	int encontrado = 0;
+	for(int i = 0; i < cuenta; i++){
+		if(trabajos[i].pid == pid){
+			cambiarestado(pid, "Stopped");
+			printf("El mandado con PID: %d ha sido detenido y mandado al background\n", pid);
+			fflush(stdout);
+			encontrado = 1;
+			continue;
+		}
+	}
+	if(!encontrado){
+		addjob(pid, input, "Stopped");
+		printf("El mandado con PID: %d ha sido detenido y mandado al background\n", pid);
+		fflush(stdout);
+	}
+
+	kill(pid, SIGTSTP);
+	pid = -1;
     } else {
         printf("\nmsh> ");
 	fflush(stdout);
@@ -157,11 +172,13 @@ void controlZ() {
 
 void controlC() {
     if (pid > 0) {
-        kill(pid, SIGKILL);  
-        printf("\nEl proceso con PID %d ha sido terminado\n", pid);
-        printf("\nmsh> ");
-	borrarjob(pid); 
-        pid= -1;
+	for(int i = 0; i < cuenta; i++){
+        	kill(pid, SIGKILL);
+        	printf("\nEl proceso con PID %d ha sido terminado\n", pid);
+        	printf("\nmsh> ");
+		borrarjob(pid);
+       		pid= -1;
+	}
     } else {
         printf("\nmsh> ");
     }
@@ -184,8 +201,44 @@ void exitShell() {
     printf("Se ha terminado el programa, hasta luego!\n");
 }
 
+void bg(pid_t pid){
+	if(cuenta == 0){
+		printf("No hay trabajos detenidos o en segundo plano\n");
+		fflush(stdout);
+		return;
+	}
+
+	if(pid < 0){
+		for(int i = cuenta - 1; i >= 0; i--){
+			if(strcmp(trabajos[i].estado, "Stopped") == 0) {
+				pid = trabajos[i].pid;
+				break;
+			}
+		}
+	}
+	for(int i = 0; i < cuenta; i++){
+		if(trabajos[i].pid == pid){
+			if(strcmp(trabajos[i].estado, "Stopped") != 0){
+				fprintf(stderr, "El trabajo con PID: %d ya esta en ejecución\n", pid);
+				return;
+			}
+			if(kill(trabajos[i].pid, SIGCONT) == -1){
+				fprintf(stderr, "Error al continuar con la ejecución del trabajo\n");
+				exit(-1);
+			}
+			printf("El trabajo con PID: %d se ha reanudado en el background\n", pid);
+			fflush(stdout);
+			cambiarestado(pid, "Running");
+			return;
+		}
+	}
+	fprintf(stderr, "No se encontró ningún trabajo con el PID especificado\n");
+	exit(-1);
+}
+
+
 int main() {
-    
+
     tline *line;
 
     if(signal(SIGTSTP, controlZ) == SIG_ERR){
@@ -214,7 +267,7 @@ int main() {
         if(line == NULL || line->ncommands == 0){
             continue;
         }
-        
+
         int encontrado = 0;
         for (int i = 0; i < line->ncommands; i++) {
             if (strcmp(line->commands[i].argv[0], "umask") == 0) {
@@ -222,14 +275,14 @@ int main() {
                   break;
             }
         }
-        
+
         if (encontrado && line->ncommands > 1) {
             fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
             continue;
         }
 
         if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "umask") == 0) {
-            funcionumask(line);            
+            funcionumask(line);
             continue;
         }
 
@@ -265,25 +318,35 @@ int main() {
             	trabajosterminados();
 		showjob();
         }
-        
+
 
         // Salir si el usuario escribe "exit"
         else if (line->ncommands == 1 && strcmp(line->commands[0].argv[0], "exit") == 0) {
-            exitShell(line);
+            exitShell();
             break;
         }
+
+	// Mandato interno bg
+	else if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "bg") == 0){
+		pid_t pid = -1;
+		char *end;
+		if(line->commands[0].argc == 2){
+			pid = strtol(line->commands[0].argv[1], &end, 10);
+		}
+		bg(pid);
+	}
 
         // Caso de un solo mandato
         else if (line->ncommands == 1) {
             tcommand mandato = line->commands[0];
 
             if(mandato.filename == NULL){
-                fprintf(stderr, "El mandato no existe");
+                fprintf(stderr, "El mandato no existe\n");
             }
 
             pid = fork();
             if (pid < 0) {
-                fprintf(stderr, "Error al crear el proceso hijo");
+                fprintf(stderr, "Error al crear el proceso hijo\n");
                 exit(-1);
             }
             // proceso hijo
@@ -292,10 +355,9 @@ int main() {
                 if (line->redirect_input != NULL) {
                     int fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
-                        fprintf(stderr, "Error al abrir el fichero de entrada");
+                        fprintf(stderr, "Error al abrir el fichero de entrada\n");
                         exit(-1);
                     }
-                    printf("FICHERO ABIERTO");
                     dup2(fichero, 0);
                     close(fichero);
                 }
@@ -304,7 +366,7 @@ int main() {
                 if (line->redirect_output != NULL) {
                     int fichero = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fichero < 0) {
-                        fprintf(stderr, "Error al abrir el fichero de salida");
+                        fprintf(stderr, "Error al abrir el fichero de salida\n");
                         exit(-1);
                     }
                     dup2(fichero, 1);
@@ -315,7 +377,7 @@ int main() {
                 if(line->redirect_error != NULL){
                     int fichero = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if(fichero < 0){
-                        fprintf(stderr, "Error al abrir el fichero de salida error");
+                        fprintf(stderr, "Error al abrir el fichero de salida error\n");
                         exit(-1);
                     }
                     dup2(fichero, 2);
@@ -324,7 +386,7 @@ int main() {
 
                 // Ejecutar el mandato
                 execvp(mandato.filename, mandato.argv);
-                fprintf(stderr, "Error al ejecutar el mandato");
+                fprintf(stderr, "Error al ejecutar el mandato\n");
                 exit(-1);
             } else {
                 // Proceso padre
@@ -345,13 +407,13 @@ int main() {
 		int numero_pipes = line->ncommands - 1;
 		int **tuberia = malloc(numero_pipes * sizeof(int *));
 		if(tuberia == NULL){
-			fprintf(stderr, "Error al asignar memoria para crear la tuberia");
+			fprintf(stderr, "Error al asignar memoria para crear la tuberia\n");
 			exit(-1);
 		}
 		for (int i = 0; i < numero_pipes; i++){
 			tuberia[i] = malloc(2 * sizeof(int));
 			if(pipe(tuberia[i]) < 0){
-				fprintf(stderr, "Error al crear los extremos del pipe");
+				fprintf(stderr, "Error al crear los extremos del pipe\n");
 				exit(-1);
 			}
 		}
@@ -360,7 +422,7 @@ int main() {
 			pid = fork();
 
 			if (pid < 0) {
-				fprintf(stderr, "Error al crear el primer proceso hijo");
+				fprintf(stderr, "Error al crear el primer proceso hijo\n");
 				exit(-1);
 			}
 
@@ -370,7 +432,7 @@ int main() {
 					if(line->redirect_input != NULL){
 						int fichero = open(line->redirect_input, O_RDONLY);
 						if(fichero < 0){
-							fprintf(stderr, "Error al abrir el fichero de entrada");
+							fprintf(stderr, "Error al abrir el fichero de entrada\n");
 							exit(-1);
 						}
 						dup2(fichero, 0);
@@ -400,7 +462,7 @@ int main() {
 					if(line->redirect_output != NULL){
 						int fichero = open(line->redirect_output, O_WRONLY | O_TRUNC | O_CREAT, 0644);
 						if(fichero < 0){
-							fprintf(stderr, "Error al abrir el fichero de salida");
+							fprintf(stderr, "Error al abrir el fichero de salida\n");
 							exit(-1);
 						}
 						dup2(fichero, 1);
@@ -409,7 +471,7 @@ int main() {
 					if(line->redirect_error != NULL){
 						int fichero = open(line->redirect_error, O_WRONLY | O_TRUNC | O_CREAT, 0644);
 						if(fichero < 0){
-							fprintf(stderr, "Error al abrir el fichero de salida error");
+							fprintf(stderr, "Error al abrir el fichero de salida error\n");
 							exit(-1);
 						}
 						dup2(fichero, 2);
@@ -425,7 +487,7 @@ int main() {
 
 				tcommand mandato = line->commands[i];
 				execvp(mandato.filename, mandato.argv);
-				fprintf(stderr, "Error al ejecutar los mandatos");
+				fprintf(stderr, "Error al ejecutar los mandatos\n");
 				exit(-1);
 
 			}
