@@ -148,9 +148,6 @@ void controlZ() {
 	int encontrado = 0;
 	for(int i = 0; i < cuenta; i++){
 		if(trabajos[i].pid == pid){
-			cambiarestado(pid, "Stopped");
-			printf("El mandado con PID: %d ha sido detenido y mandado al background\n", pid);
-			fflush(stdout);
 			encontrado = 1;
 			continue;
 		}
