@@ -17,7 +17,7 @@ typedef struct job {
 
 job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
 int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
-char input[1024]; // Esto hay que hacerlo con malloc
+char *input = NULL; // Esto hay que hacerlo con malloc
 pid_t pid;
 
 void funcionumask(tline *line) {
@@ -154,7 +154,7 @@ void controlZ() {
 	}
 	if(!encontrado){
 		addjob(pid, input, "Stopped");
-		printf("El mandado con PID: %d ha sido detenido y mandado al background\n", pid);
+		printf("\nEl mandado con PID: %d ha sido detenido y mandado al background\n", pid);
 		fflush(stdout);
 	}
 
@@ -169,32 +169,37 @@ void controlZ() {
 
 void controlC() {
     if (pid > 0) {
+    	int encontrado = 0;
 	for(int i = 0; i < cuenta; i++){
+		if(trabajos[i].pid == pid){
+			encontrado = 1;
+			continue;
+		}
+	}
+	if(!encontrado){
         	kill(pid, SIGKILL);
         	printf("\nEl proceso con PID %d ha sido terminado\n", pid);
-        	printf("\nmsh> ");
+        	fflush(stdout);
 		borrarjob(pid);
-       		pid= -1;
 	}
+
     } else {
         printf("\nmsh> ");
+        fflush(stdout);
     }
-    fflush(stdout);
 }
 
 void exitShell() {
     for (int i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
             pid_t pid = trabajos[i].pid;
-            int estado;
-            waitpid(pid, &estado, 0);
             printf("El trabajo con PID %d ha terminado\n", pid);
             borrarjob(pid);
         }
     }
 
     borrartrabajos();
-
+    free(input);
     printf("Se ha terminado el programa, hasta luego!\n");
 }
 
@@ -230,13 +235,20 @@ void bg(pid_t pid){
 		}
 	}
 	fprintf(stderr, "No se encontró ningún trabajo con el PID especificado\n");
-	exit(-1);
+	return;
 }
 
 
 int main() {
 
     tline *line;
+
+    input = malloc(1024 * sizeof(char));
+    if (input == NULL) {
+        fprintf(stderr, "Error al asignar memoria para la entrada\n");
+        exit(-1);
+    }
+
 
     if(signal(SIGTSTP, controlZ) == SIG_ERR){
         fprintf(stderr, "Error al configurar el Control+Z\n");
@@ -254,7 +266,7 @@ int main() {
         fflush(stdout);
 
         // Leer entrada del usuario
-        if (fgets(input, sizeof(input), stdin) == NULL) {
+        if (fgets(input, 1024, stdin) == NULL) {
             printf("\n");
             break;
         }
