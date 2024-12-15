@@ -15,27 +15,37 @@ typedef struct job {
     char *estado;
 }job;
 
-job *trabajos = NULL;  //inicializo la lista de trabajos a NULL
-int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
-char *input = NULL; // Esto hay que hacerlo con malloc
-pid_t pid;
+job *trabajos = NULL;
 
+int cuenta = 0;  //inicializo la cuenta de los trabajos a 0
+char *input = NULL;
+pid_t pid;
+pid_t proceso_fg;
+
+void actualizar_fg(pid_t pid) {
+  proceso_fg = pid;
+}
 void funcionumask(tline *line) {
+int i;
+char *arg;
+int mask;
+mode_t actualumask;
+
     if (line->ncommands == 1 && line->commands[0].argc > 2) {
         fprintf(stderr, "El comando umask solo puede tener un argumento o ninguno.\n");
         return;
     }
     if (line->ncommands == 1 && line->commands[0].argc == 2) {
-        char *arg = line->commands[0].argv[1];
+        arg = line->commands[0].argv[1];
 
-        for (int i = 0; arg[i] != '\0'; i++) {
+        for (i = 0; arg[i] != '\0'; i++) {
             if (arg[i] < '0' || arg[i] > '7') {
                 fprintf(stderr, "El argumento de umask debe ser un número octal válido.\n");
                 return;
             }
         }
 
-        int mask = strtol(arg, NULL, 8);
+        mask = strtol(arg, NULL, 8);
 
         if (mask < 0 || mask > 0777) {
             fprintf(stderr, "El valor de umask debe ser un número octal.\n");
@@ -45,61 +55,14 @@ void funcionumask(tline *line) {
         printf("Máscara de permisos cambiada a: %03o\n", mask);
     } else {
         // Si no se pasa argumento, mostrar la máscara actual
-        mode_t actualumask = umask(0); // Obtiene la máscara actual
+        actualumask = umask(0); // Obtiene la máscara actual
         umask(actualumask); // Restaura la máscara
         printf("Máscara de permisos actual: %03o\n", actualumask);
     }
 }
-
-void addjob(pid_t pid, char *command, char *estado){
-    trabajos = realloc(trabajos, sizeof(struct job) * (cuenta + 1));
-    if(trabajos == NULL){
-        fprintf(stderr, "Error al asignar memoria para jobs\n");
-        exit(-1);
-    }
-    trabajos[cuenta].id = cuenta + 1;
-    trabajos[cuenta].pid = pid;
-    trabajos[cuenta].command = strdup(command); // se crea una copia de los comandos y se guarda en el tipo job
-    trabajos[cuenta].estado = strdup(estado); //duplica el valor del estado y lo guarda
-
-    if(trabajos[cuenta].command == NULL || trabajos[cuenta].estado == NULL){
-        fprintf(stderr, "Error al duplicar el mandato");
-        exit(-1);
-    }
-    cuenta++;
-}
-
-void showjob(){
-    for(int i = 0; i < cuenta; i++){
-        printf("[%d] %s %s\n", trabajos[i].id, trabajos[i].estado, trabajos[i].command);
-    }
-	if(cuenta == 0){
-		printf("No hay trabajos en segundo plano, ni parados ni ejecutandose\n");
-	}
-}
-
-void borrarjob(pid_t pid){
-    for(int i = 0; i < cuenta ; i++){
-        if(trabajos[i].pid == pid){
-            free(trabajos[i].command);
-            free(trabajos[i].estado);
-            for(int j = i; j < cuenta - 1; j++){
-                trabajos[j] = trabajos[j + 1];
-            }
-            cuenta--;
-
-            trabajos = realloc(trabajos, sizeof(struct job) * cuenta);
-            // Aquí se tiene en cuenta la variable "cuenta" porque si es igual a 0 el realloc daría NULL si o si, pero eso no sería un error
-            if(trabajos == NULL && cuenta > 0){
-                fprintf(stderr, "Error al reasignar memoria para los trabajos\n");
-                exit(-1);
-            }
-        }
-    }
-}
-
 void cambiarestado(pid_t pid, char *nuevoestado){
-    for(int i = 0; i < cuenta; i++){
+int i;
+    for(i = 0; i < cuenta; i++){
         if(trabajos[i].pid == pid){
             free(trabajos[i].estado);
             trabajos[i].estado = strdup(nuevoestado);
@@ -111,8 +74,99 @@ void cambiarestado(pid_t pid, char *nuevoestado){
     }
 }
 
+void addjob(pid_t pid, char *command, char *estado) {
+int i;
+    for (i = 0; i < cuenta; i++) {
+        if (trabajos[i].pid == pid) {
+            cambiarestado(pid, estado);
+            return;
+        }
+    }
+
+    trabajos = realloc(trabajos, sizeof(job) * (cuenta + 1));
+    if (trabajos == NULL) {
+        fprintf(stderr, "Error al asignar memoria para los trabajos\n");
+        exit(-1);
+    }
+
+    trabajos[cuenta].id = cuenta + 1;
+    trabajos[cuenta].pid = pid;
+    trabajos[cuenta].command = strdup(command);
+    trabajos[cuenta].estado = strdup(estado);
+
+    if (trabajos[cuenta].command == NULL || trabajos[cuenta].estado == NULL) {
+        fprintf(stderr, "Error al asignar memoria\n");
+        exit(-1);
+    }
+    cuenta++;
+}
+
+void showjob(){
+int i;
+    for(i = 0; i < cuenta; i++){
+        printf("[%d] %s %s\n", trabajos[i].id, trabajos[i].estado, trabajos[i].command);
+    }
+	if(cuenta == 0){
+		printf("No hay trabajos en segundo plano, ni parados ni ejecutandose\n");
+	}
+}
+
+void borrarjob(pid_t pid) {
+int i, j;
+job *temp;
+    for(i = 0; i < cuenta; i++) {
+        if(trabajos[i].pid == pid) {
+            free(trabajos[i].command);
+            free(trabajos[i].estado);
+
+            // Mover todos los trabajos una posición hacia arriba
+            for(j = i; j < cuenta - 1; j++) {
+                trabajos[j] = trabajos[j + 1];
+                trabajos[j].id = j + 1;
+            }
+            cuenta--;
+
+            // Redimensionar el array
+            if(cuenta > 0) {
+                temp = realloc(trabajos, sizeof(job) * cuenta);
+                if(temp != NULL) {
+                    trabajos = temp;
+                }
+            } else {
+                free(trabajos);
+                trabajos = NULL;
+            }
+            return;
+        }
+    }
+}
+
+void manejador_SIGCHLD() {
+    int estado;
+    pid_t pid;
+
+    while ((pid = waitpid(-1, &estado, WNOHANG | WUNTRACED | WCONTINUED)) > 0) {
+        if (WIFEXITED(estado) || WIFSIGNALED(estado)) {
+            borrarjob(pid);
+        } else if (WIFSTOPPED(estado)) {
+            if (pid == proceso_fg) {
+                cambiarestado(pid, "Stopped");
+                proceso_fg = 0;
+            }
+        } else if (WIFCONTINUED(estado)) {
+            cambiarestado(pid, "Running");
+            printf("\nProceso %d ha continuado su ejecución\n", pid);
+        }
+    }
+}
+
+void trabajosterminados() {
+    manejador_SIGCHLD(SIGCHLD);
+}
+
 void borrartrabajos(){
-    for(int i = 0; i < cuenta; i++){
+int i;
+    for(i = 0; i < cuenta; i++){
         free(trabajos[i].estado);
         free(trabajos[i].command);
     }
@@ -121,68 +175,60 @@ void borrartrabajos(){
     cuenta = 0;
 }
 
-void trabajosterminados(){
-    int estado;
-    pid_t pid;
-
-    while((pid = waitpid(-1, &estado, WNOHANG)) > 0){
-	borrarjob(pid);
-	printf("El trabajo con PID: %d ha terminado\n", pid);
-	fflush(stdout);
-    }
-}
-
-void moverforeground(pid_t pid){
-    for(int i = 0; i < cuenta; i++){
-        if(trabajos[i].pid == pid){
+void moverforeground(pid_t pid) {
+int i, estado;
+    for(i = 0; i < cuenta; i++) {
+        if(trabajos[i].pid == pid) {
+            actualizar_fg(pid);
             cambiarestado(pid, "Running");
-            int estado;
-            waitpid(pid, &estado, 0);
-            borrarjob(pid);
+            if(kill(pid, SIGCONT) == -1) {
+                fprintf(stderr, "Error al continuar el proceso\n");
+                return;
+            }
+            waitpid(pid, &estado, WUNTRACED);
+            proceso_fg = 0;
+            if (!WIFSTOPPED(estado)) {
+                borrarjob(pid);
+            }
         }
     }
 }
 
 void controlZ() {
-    if (pid > 0) {
-	int encontrado = 0;
-	for(int i = 0; i < cuenta; i++){
-		if(trabajos[i].pid == pid){
-			encontrado = 1;
-			continue;
-		}
-	}
-	if(!encontrado){
-		addjob(pid, input, "Stopped");
-		printf("\nEl mandado con PID: %d ha sido detenido y mandado al background\n", pid);
-		fflush(stdout);
-	}
+pid_t pid_actual;
+int i;
+    if (proceso_fg > 0) {
+        pid_actual = proceso_fg;
+        proceso_fg = 0;
 
-	kill(pid, SIGTSTP);
-	pid = -1;
+        for(i = 0; i < cuenta; i++) {
+            if(trabajos[i].pid == pid_actual) {
+                cambiarestado(pid_actual, "Stopped");
+                kill(pid_actual, SIGTSTP);
+                return;
+            }
+        }
+        kill(pid_actual, SIGTSTP);
+        addjob(pid_actual, input, "Stopped");
+        printf("\nEl mandato con PID: %d ha sido detenido y mandado al background\n", pid_actual);
+        fflush(stdout);
     } else {
         printf("\nmsh> ");
-	fflush(stdout);
+        fflush(stdout);
     }
 }
 
-
 void controlC() {
-    if (pid > 0) {
-    	int encontrado = 0;
-	for(int i = 0; i < cuenta; i++){
-		if(trabajos[i].pid == pid){
-			encontrado = 1;
-			continue;
-		}
-	}
-	if(!encontrado){
-        	kill(pid, SIGKILL);
-        	printf("\nEl proceso con PID %d ha sido terminado\n", pid);
-        	fflush(stdout);
-		borrarjob(pid);
-	}
-
+int i;
+    if (proceso_fg > 0) {  // Solo si hay un proceso en foreground
+        for(i = 0; i < cuenta; i++) {
+            if(trabajos[i].pid == proceso_fg) {
+                return;  // No hacer nada si el proceso está en background
+            }
+        }
+        kill(proceso_fg, SIGKILL);
+        printf("\nEl proceso con PID %d ha sido terminado\n", proceso_fg);
+        fflush(stdout);
     } else {
         printf("\nmsh> ");
         fflush(stdout);
@@ -190,20 +236,31 @@ void controlC() {
 }
 
 void exitShell() {
-    for (int i = 0; i < cuenta; i++) {
+int i;
+pid_t pid;
+    for (i = 0; i < cuenta; i++) {
         if (trabajos[i].estado == NULL || strcmp(trabajos[i].estado, "Stopped") != 0) {
-            pid_t pid = trabajos[i].pid;
-            printf("El trabajo con PID %d ha terminado\n", pid);
+            pid = trabajos[i].pid;
             borrarjob(pid);
         }
     }
 
-    borrartrabajos();
-    free(input);
-    printf("Se ha terminado el programa, hasta luego!\n");
+	borrartrabajos();
+	for(i = 0; i < cuenta; i++){
+		free(trabajos[i].command);
+		free(trabajos[i].estado);
+	}
+	free(trabajos);
+	free(input);
+	trabajos = NULL;
+	input = NULL;
+
+	printf("Se ha terminado el programa, hasta luego!\n");
+	exit(0);
 }
 
 void bg(pid_t pid){
+int i;
 	if(cuenta == 0){
 		printf("No hay trabajos detenidos o en segundo plano\n");
 		fflush(stdout);
@@ -211,14 +268,14 @@ void bg(pid_t pid){
 	}
 
 	if(pid < 0){
-		for(int i = cuenta - 1; i >= 0; i--){
+		for(i = cuenta - 1; i >= 0; i--){
 			if(strcmp(trabajos[i].estado, "Stopped") == 0) {
 				pid = trabajos[i].pid;
 				break;
 			}
 		}
 	}
-	for(int i = 0; i < cuenta; i++){
+	for(i = 0; i < cuenta; i++){
 		if(trabajos[i].pid == pid){
 			if(strcmp(trabajos[i].estado, "Stopped") != 0){
 				fprintf(stderr, "El trabajo con PID: %d ya esta en ejecución\n", pid);
@@ -236,11 +293,16 @@ void bg(pid_t pid){
 	}
 	fprintf(stderr, "No se encontró ningún trabajo con el PID especificado\n");
 	return;
+	pid = -1;
 }
 
-
 int main() {
-
+int i, j, encontrado, fichero, estado, numero_pipes;
+int **tuberia;
+char *nuevodir;
+char diractual[1024];
+pid_t pid;
+char *end;
     tline *line;
 
     input = malloc(1024 * sizeof(char));
@@ -249,6 +311,11 @@ int main() {
         exit(-1);
     }
 
+
+    if(signal(SIGCHLD, manejador_SIGCHLD) == SIG_ERR){
+        fprintf(stderr, "Error al configurar SIGCHLD\n");
+        exit(-1);
+    }
 
     if(signal(SIGTSTP, controlZ) == SIG_ERR){
         fprintf(stderr, "Error al configurar el Control+Z\n");
@@ -262,6 +329,7 @@ int main() {
 
     while (1) { // Bucle principal del shell
         // Mostrar el prompt
+        trabajosterminados();
         printf("msh> ");
         fflush(stdout);
 
@@ -277,16 +345,16 @@ int main() {
             continue;
         }
 
-        int encontrado = 0;
-        for (int i = 0; i < line->ncommands; i++) {
-            if (strcmp(line->commands[i].argv[0], "umask") == 0) {
+        encontrado = 0;
+        for (i = 0; i < line->ncommands; i++) {
+            if (strcmp(line->commands[i].argv[0], "umask") == 0 || strcmp(line->commands[i].argv[0], "cd") == 0  ){
                   encontrado = 1;
                   break;
             }
         }
 
         if (encontrado && line->ncommands > 1) {
-            fprintf(stderr, "El mandato umask no puede ejecutarse con pipes.\n");
+            fprintf(stderr, "El mandato no puede ejecutarse con pipes.\n");
             continue;
         }
 
@@ -297,7 +365,6 @@ int main() {
 
         //comando cd
         if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "cd") == 0){
-            char *nuevodir;
             tcommand mandato = line->commands[0];
             if(mandato.argc == 1){
                 nuevodir = getenv("HOME");
@@ -313,7 +380,6 @@ int main() {
                 fprintf(stderr, "Error al cambiar el directorio\n");
                 continue;
             }else{
-                char diractual[1024];
                 if(getcwd(diractual, sizeof(diractual)) != NULL){
                     printf("El directorio actual es: %s\n", diractual);
                 }else{
@@ -337,8 +403,7 @@ int main() {
 
 	// Mandato interno bg
 	else if(line->ncommands == 1 && strcmp(line->commands[0].argv[0], "bg") == 0){
-		pid_t pid = -1;
-		char *end;
+		pid = -1;
 		if(line->commands[0].argc == 2){
 			pid = strtol(line->commands[0].argv[1], &end, 10);
 		}
@@ -358,11 +423,18 @@ int main() {
                 fprintf(stderr, "Error al crear el proceso hijo\n");
                 exit(-1);
             }
+            if(line->background == 0){
+                actualizar_fg(pid);
+            }
             // proceso hijo
             if (pid == 0) {
                 // Redirección de entrada
+                signal(SIGCHLD, SIG_DFL);
+                signal(SIGTSTP, SIG_DFL);
+                signal(SIGINT, SIG_DFL);
+
                 if (line->redirect_input != NULL) {
-                    int fichero = open(line->redirect_input, O_RDONLY);
+                    fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
                         fprintf(stderr, "Error al abrir el fichero de entrada\n");
                         exit(-1);
@@ -373,7 +445,7 @@ int main() {
 
                 // Redirección de salida
                 if (line->redirect_output != NULL) {
-                    int fichero = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    fichero = open(line->redirect_output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fichero < 0) {
                         fprintf(stderr, "Error al abrir el fichero de salida\n");
                         exit(-1);
@@ -384,7 +456,7 @@ int main() {
 
                 // Redireccion de salida error
                 if(line->redirect_error != NULL){
-                    int fichero = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    fichero = open(line->redirect_error, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if(fichero < 0){
                         fprintf(stderr, "Error al abrir el fichero de salida error\n");
                         exit(-1);
@@ -398,28 +470,26 @@ int main() {
                 fprintf(stderr, "Error al ejecutar el mandato\n");
                 exit(-1);
             } else {
-                // Proceso padre
-                int estado;
-                if(line->background == 1){
-                    printf("El proceso con PID: %d, se está ejecutando en background\n", pid);
-                    addjob(pid, input, "Running"); // Cambié "line->commands[i]" por "line->commands[0].argv[0]"
-                    continue;
-                } else {
-                    waitpid(pid, &estado, WUNTRACED); // Esperar a que el hijo termine
-                }
-            }
+    // Proceso padre
+                  if(line->background == 1){
+                      printf("El proceso con PID: %d, se está ejecutando en background\n", pid);
+                      addjob(pid, input, "Running");
+                  } else {
+                      waitpid(pid, &estado, WUNTRACED);
+                      proceso_fg = 0;  // Asegurarse de resetear proceso_fg
+                  }
         }
 
-
+}
 // Caso de mas de dos
         else if (line->ncommands >= 2) {
-		int numero_pipes = line->ncommands - 1;
-		int **tuberia = malloc(numero_pipes * sizeof(int *));
+		numero_pipes = line->ncommands - 1;
+		tuberia = malloc(numero_pipes * sizeof(int *));
 		if(tuberia == NULL){
 			fprintf(stderr, "Error al asignar memoria para crear la tuberia\n");
 			exit(-1);
 		}
-		for (int i = 0; i < numero_pipes; i++){
+		for (i = 0; i < numero_pipes; i++){
 			tuberia[i] = malloc(2 * sizeof(int));
 			if(pipe(tuberia[i]) < 0){
 				fprintf(stderr, "Error al crear los extremos del pipe\n");
@@ -427,7 +497,7 @@ int main() {
 			}
 		}
 
-		for (int i = 0; i < line->ncommands; i++){
+		for (i = 0; i < line->ncommands; i++){
 			pid = fork();
 
 			if (pid < 0) {
@@ -435,11 +505,17 @@ int main() {
 				exit(-1);
 			}
 
+                       if(line->background == 0){
+                                actualizar_fg(pid);
+                       }
 			if (pid == 0) {
+			signal(SIGCHLD, SIG_DFL);
+                        signal(SIGTSTP, SIG_DFL);
+                        signal(SIGINT, SIG_DFL);
 				if(i == 0){
 					//redireccion entrada estandar
 					if(line->redirect_input != NULL){
-						int fichero = open(line->redirect_input, O_RDONLY);
+						fichero = open(line->redirect_input, O_RDONLY);
 						if(fichero < 0){
 							fprintf(stderr, "Error al abrir el fichero de entrada\n");
 							exit(-1);
@@ -449,7 +525,7 @@ int main() {
 					}
 					//salida al pipe
 					dup2(tuberia[i][1], 1);
-					for(int j = 0; j < line->ncommands-1; j++){
+					for(j = 0; j < line->ncommands-1; j++){
 						close(tuberia[j][0]);
 						close(tuberia[j][1]);
 					}
@@ -459,7 +535,7 @@ int main() {
 					dup2(tuberia[i-1][0], 0);
 					//salida pipe
 					dup2(tuberia[i][1], 1);
-					for(int j = 0; j < line->ncommands-1; j++){
+					for(j = 0; j < line->ncommands-1; j++){
 						close(tuberia[j][0]);
 						close(tuberia[j][1]);
 					}
@@ -469,7 +545,7 @@ int main() {
 					dup2(tuberia[i-1][0], 0);
 					//salida estandar
 					if(line->redirect_output != NULL){
-						int fichero = open(line->redirect_output, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+						fichero = open(line->redirect_output, O_WRONLY | O_TRUNC | O_CREAT, 0644);
 						if(fichero < 0){
 							fprintf(stderr, "Error al abrir el fichero de salida\n");
 							exit(-1);
@@ -478,7 +554,7 @@ int main() {
 						close(fichero);
 					}
 					if(line->redirect_error != NULL){
-						int fichero = open(line->redirect_error, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+						fichero = open(line->redirect_error, O_WRONLY | O_TRUNC | O_CREAT, 0644);
 						if(fichero < 0){
 							fprintf(stderr, "Error al abrir el fichero de salida error\n");
 							exit(-1);
@@ -487,7 +563,7 @@ int main() {
 						close(fichero);
 					}
 
-					for(int j=0; j<line->ncommands-1; j++){
+					for(j=0; j<line->ncommands-1; j++){
 						close(tuberia[j][0]);
 						close(tuberia[j][1]);
 					}
@@ -502,17 +578,16 @@ int main() {
 			}
 	}
             	// Proceso padre
-		for(int i = 0; i < line->ncommands-1; i++){
+		for(i = 0; i < line->ncommands-1; i++){
             		close(tuberia[i][0]);
             		close(tuberia[i][1]);
 		}
 		if(line->background == 1){
 			printf("El proceso con PID: %d, se está ejecutando en background\n", pid);
-			    addjob(pid, input, "Running");
-			continue;
+			addjob(pid, input, "Running");
 		}else{
-			for(int i = 0; i < line->ncommands; i++){
-            			wait(NULL); // Esperar al primer hijo
+			for(i = 0; i < line->ncommands; i++){
+            		      wait(&estado); // Esperar al primer hijo
 			}
 		}
 	free(tuberia);
