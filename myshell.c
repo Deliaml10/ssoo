@@ -428,11 +428,10 @@ char *end;
             }
             // proceso hijo
             if (pid == 0) {
-                // Redirección de entrada
                 signal(SIGCHLD, SIG_DFL);
                 signal(SIGTSTP, SIG_DFL);
                 signal(SIGINT, SIG_DFL);
-
+		//Redirección de entrada
                 if (line->redirect_input != NULL) {
                     fichero = open(line->redirect_input, O_RDONLY);
                     if (fichero < 0) {
@@ -461,7 +460,7 @@ char *end;
                         fprintf(stderr, "Error al abrir el fichero de salida error\n");
                         exit(-1);
                     }
-                    dup2(fichero, 2);
+                    dup2(fichero, STDERR_FILENO);
                     close(fichero);
                 }
 
